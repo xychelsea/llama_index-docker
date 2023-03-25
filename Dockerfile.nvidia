@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-FROM xychelsea/anaconda3:v0.6-gpu
+FROM xychelsea/anaconda3:v22.11.1-gpu
 LABEL description="llama_index GPU Container"
 
 # $ docker build --network=host -t xychelsea/llama_index:latest-gpu -f Dockerfile.nvidia .
@@ -23,6 +23,7 @@ LABEL description="llama_index GPU Container"
 
 ENV ANACONDA_ENV=llama_index
 ENV LLAMA_INDEX_PATH=/usr/local/llama_index
+ENV LLAMA_INDEX_VERSION=v0.4.38
 
 # Start as root
 USER root
@@ -48,10 +49,22 @@ WORKDIR ${HOME}
 RUN conda update -c defaults conda
 
 # add llama_index repository to docker image
-RUN git clone https://github.com/jerryjliu/llama_index ${LLAMA_INDEX_PATH}
+RUN git clone https://github.com/jerryjliu/llama_index ${LLAMA_INDEX_PATH} \
+    && git config --global --add safe.directory ${LLAMA_INDEX_PATH}
 
-# Create environment and install dependencies
-RUN conda create -n ${ANACONDA_ENV} -c conda-forge \
+# checkout llama_index branch
+WORKDIR ${LLAMA_INDEX_PATH}
+RUN git checkout ${LLAMA_INDEX_VERSION}
+
+# Add llama_index directory to home
+RUN fix-permissions ${LLAMA_INDEX_PATH} \
+    && ln -s ${LLAMA_INDEX_PATH} ${HOME}/llama_index
+
+# create environment
+RUN conda create -n ${ANACONDA_ENV} -c conda-forge
+
+# install dependencies
+RUN conda install -n ${ANACONDA_ENV} -c conda-forge \
     aiohttp=3.8.4 \ 
     aiosignal=1.3.1 \
     async-timeout=4.0.2 \
@@ -110,14 +123,11 @@ RUN conda create -n ${ANACONDA_ENV} -c conda-forge \
 
 WORKDIR ${LLAMA_INDEX_PATH}
 
+# Build llama_index
 RUN conda run -n ${ANACONDA_ENV} pip install -r ${LLAMA_INDEX_PATH}/requirements.txt
 
 # Switch back to root
 USER root
-
-# Add llama_index directory to home
-RUN fix-permissions ${LLAMA_INDEX_PATH} \
-    && ln -s ${LLAMA_INDEX_PATH} ${HOME}/llama_index
 
 # Clean up anaconda
 RUN conda clean -afy
